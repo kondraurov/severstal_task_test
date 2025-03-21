@@ -24,3 +24,34 @@ git clone https://github.com/kondraurov/severstal_task_test
 ```
 docker-compose up --build
 ```
+
+
+## В случае проблем с запуском через докер рекомендуется запустить проект через uvicorn: 
+
+### 1) Клонируйте репозиторий (если ещё не клонировали)
+
+### 2) Установите зависимости:
+
+```
+pip install -r requirements.txt
+
+```
+
+### 3) Запустите скрипт для инициализации БД:
+
+```
+python init_db.py
+
+```
+
+### 4) Выполните миграции с помощью Alembic:
+
+```
+alembic upgrade head
+```
+
+### 5) Запустите приложение через Uvicorn:
+
+```
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
