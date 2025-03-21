@@ -8,12 +8,11 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - ./db.sqlite3:/app/db.sqlite3
     depends_on:
       - db
-    command: >
-      sh -c "python init_db.py && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
-      DATABASE_URL: "sqlite+aiosqlite:///./db.sqlite3"
+      DATABASE_URL: "sqlite+aiosqlite:///app/db.sqlite3"
 
   db:
     image: busybox
