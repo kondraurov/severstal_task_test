@@ -1,10 +1,13 @@
+from datetime import date
+from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
-from app.rolls.models import RollFilter
+from sqlalchemy import select
+
+from app.database import async_session_maker
 from app.rolls.schemas import SchemasRoll
 from app.rolls.dao import RollDAO
 from app.rolls.services import filter_roll, delete_roll
-from typing import Optional
-from datetime import date, datetime
+from app.rolls.models import RollFilter, Roll
 
 router = APIRouter(
     prefix="/roll", tags=["API roll"]
@@ -13,24 +16,35 @@ router = APIRouter(
 
 @router.post("/add")
 async def api_add_roll(roll_data: SchemasRoll):
-    # Возможно, тут необходимо добавить обработку ошибок
-    try:
-        return await RollDAO.add(
-            length=roll_data.length,
-            weight=roll_data.weight,
-            date_added=roll_data.date_added,
-            date_removed=roll_data.date_removed
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error adding roll: {e}")
+    return await RollDAO.add(
+        length=roll_data.length,
+        weight=roll_data.weight,
+        added_date=roll_data.date_added,
+        removed_date=roll_data.date_removed
+    )
 
 
 @router.delete("/delete/{id_roll}")
 async def api_delete_roll(id_roll: int):
-    try:
-        return await delete_roll(id_roll)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Roll with ID {id_roll} not found: {e}")
+    async with async_session_maker() as session:
+        # Находим рулон перед удалением
+        query = select(Roll).where(Roll.id == id_roll)
+        result = await session.execute(query)
+        roll = result.scalar_one_or_none()
+
+        if not roll:
+            raise HTTPException(status_code=404, detail="Рулон не найден")
+
+        await session.delete(roll)
+        await session.commit()
+
+        return {
+            "id": roll.id,
+            "length": roll.length,
+            "weight": roll.weight,
+            "added_date": roll.added_date,
+            "removed_date": roll.removed_date
+        }
 
 
 @router.get("/all")
@@ -40,8 +54,8 @@ async def api_all_roll():
 
 @router.get("/filter")
 async def api_filter_roll(
-        min_id: Optional[int] = Query(None, description="Минимальный id"),
-        max_id: Optional[int] = Query(None, description="Максимальный id"),
+        min_id: Optional[int] = Query(None, description="Минимальный идентификатор"),
+        max_id: Optional[int] = Query(None, description="Максимальный идентификатор"),
         min_weight: Optional[int] = Query(None, description="Минимальный вес"),
         max_weight: Optional[int] = Query(None, description="Максимальный вес"),
         min_length: Optional[int] = Query(None, description="Минимальная длина"),
@@ -68,7 +82,7 @@ async def api_filter_roll(
 
 @router.get("/rolls/stats")
 async def get_roll_stats(
-        start_date: datetime = Query(..., description="Начальная дата периода"),
-        end_date: datetime = Query(..., description="Конечная дата периода"),
+        start_date: date = Query(..., description="Начальная дата для выборки"),
+        end_date: date = Query(..., description="Конечная дата для выборки"),
 ):
     return await RollDAO.getting_statistics(start_date, end_date)

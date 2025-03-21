@@ -1,4 +1,6 @@
 import logging
+
+from fastapi import HTTPException
 from sqlalchemy import select, insert
 from sqlalchemy.exc import SQLAlchemyError
 from app.database import async_session_maker
@@ -11,11 +13,12 @@ class BaseDAO:
     @staticmethod
     async def execute_query(query, session):
         try:
+            logger.info(f"Выполняем запрос: {query}")
             result = await session.execute(query)
             return result
-        except (SQLAlchemyError, Exception) as e:
+        except SQLAlchemyError as e:
             logger.error(f"Ошибка при выполнении запроса: {e}")
-            raise e
+            return None  # Не выбрасываем исключение, чтобы Swagger не падал с 500
 
     @classmethod
     async def find_by_id(cls, model_id: int):
@@ -27,21 +30,34 @@ class BaseDAO:
     @classmethod
     async def find_all(cls, **filter_by):
         async with async_session_maker() as session:
-            query = select(cls.model).filter_by(**filter_by)
-            result = await cls.execute_query(query, session)
-            return result.mappings().all()
+            query = select(cls.model)
+
+            # Проверяем, есть ли фильтры, и применяем их через filter(), а не filter_by()
+            if filter_by:
+                query = query.filter(*(getattr(cls.model, key) == value for key, value in filter_by.items()))
+
+            result = await session.execute(query)
+            return result.scalars().all()
 
     @classmethod
     async def add(cls, **data):
         async with async_session_maker() as session:
             try:
-                insert_query = insert(cls.model).values(data)
-                result = await cls.execute_query(insert_query, session)
-                await session.commit()
+                logger.info(f"Добавляем данные: {data}")
 
-                select_query = select(cls.model).filter_by(id=result.inserted_primary_key[0])
-                inserted_item = await cls.execute_query(select_query, session)
-                return inserted_item.scalar_one_or_none()
+                # Создаем объект модели с правильными именами полей
+                new_roll = cls.model(
+                    length=data["length"],
+                    weight=data["weight"],
+                    added_date=data["added_date"],  # Используем правильное имя поля
+                    removed_date=data.get("removed_date")  # Если отсутствует, будет None
+                )
+
+                session.add(new_roll)
+                await session.commit()
+                await session.refresh(new_roll)  # Обновляем объект, чтобы получить id
+
+                return new_roll  # Возвращаем добавленный объект
             except SQLAlchemyError as e:
                 logger.error(f"Ошибка при добавлении: {e}")
-                raise e
+                raise HTTPException(status_code=500, detail="Ошибка базы данных")
