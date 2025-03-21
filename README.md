@@ -20,7 +20,7 @@ git clone https://github.com/kondraurov/severstal_task_test
 ### 2) Перейдите в корневую папку проекта
 
 ```
-cd severstal_test_task
+cd severstal_task_test
 ```
 
 ### 3) Пропишите в терминал следующую команду:
